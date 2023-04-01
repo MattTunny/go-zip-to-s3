@@ -21,7 +21,7 @@ import (
 const (
 	AWS_S3_REGION = "ap-southeast-2"
 	AWS_S3_BUCKET = "YOUR-S3-BUCKET"
-	SAVE_LOCATION = "%appdata%\\StardewValley\\Saves"
+	SAVE_LOCATION = "C:\\Users\User\AppData\\Roaming\\StardewValley\\Saves"
 )
 
 func zipSource(source, target string) error {
