@@ -18,12 +18,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
-const (
-	AWS_S3_REGION = "ap-southeast-2"
-	AWS_S3_BUCKET = "YOUR-S3-BUCKET"
-	SAVE_LOCATION = "C:\\Users\User\AppData\\Roaming\\StardewValley\\Saves"
-)
-
 func zipSource(source, target string) error {
 	// 1. Create a ZIP file and zip.Writer
 	f, err := os.Create(target)
@@ -80,7 +74,7 @@ func zipSource(source, target string) error {
 	})
 }
 
-func uploadFile(session *session.Session, uploadFileDir string, s3key string) error {
+func uploadFile(session *session.Session, uploadFileDir string, s3key string, s3Bucket string) error {
 
 	upFile, err := os.Open(uploadFileDir)
 	if err != nil {
@@ -94,7 +88,7 @@ func uploadFile(session *session.Session, uploadFileDir string, s3key string) er
 	upFile.Read(fileBuffer)
 
 	_, err = s3.New(session).PutObject(&s3.PutObjectInput{
-		Bucket:               aws.String(AWS_S3_BUCKET),
+		Bucket:               aws.String(s3Bucket),
 		Key:                  aws.String(s3key),
 		ACL:                  aws.String("private"),
 		Body:                 bytes.NewReader(fileBuffer),
@@ -106,7 +100,7 @@ func uploadFile(session *session.Session, uploadFileDir string, s3key string) er
 	return err
 }
 
-func downloadFile(session *session.Session, filename string) error {
+func downloadFile(session *session.Session, filename string, s3Bucket string) error {
 
 	// Create a file to write the S3 object to
 	file, err := os.Create(filename)
@@ -119,7 +113,7 @@ func downloadFile(session *session.Session, filename string) error {
 
 	numBytes, err := downloader.Download(file,
 		&s3.GetObjectInput{
-			Bucket: aws.String(AWS_S3_BUCKET),
+			Bucket: aws.String(s3Bucket),
 			Key:    aws.String("current-save.zip"),
 		})
 	if err != nil {
@@ -158,24 +152,37 @@ func getZipMD5(filename string) (string, error) {
 
 func main() {
 
+	// run program with SaveStardew.exe "ap-southeast-2" "your-s3-bucket-name" "/path/to/save/folder"
+
+	awsRegion := os.Args[1]
+	s3Bucket := os.Args[2]
+	saveLocation := os.Args[3]
+
 	// zipping
 	fmt.Println("zipping....")
-	if err := zipSource(SAVE_LOCATION, "current-save.zip"); err != nil {
+	if err := zipSource(saveLocation, "current-save.zip"); err != nil {
 		log.Fatal(err)
 	}
 
 	// starting aws session
 	fmt.Println("starting session....")
-	session, err := session.NewSession(&aws.Config{Region: aws.String(AWS_S3_REGION)})
+	session, err := session.NewSession(&aws.Config{Region: aws.String(awsRegion)})
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Download Existing Save
 	fmt.Println("download existing save....")
-	err = downloadFile(session, "s3-current-save.zip")
+	err = downloadFile(session, "s3-current-save.zip", s3Bucket)
 	if err != nil {
-		log.Fatal(err)
+		println("file hasn't been uploaded to s3 before...")
+
+		fmt.Println("uploading....current-save.zip")
+		err = uploadFile(session, "current-save.zip", "current-save.zip", s3Bucket)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 
 	// Calulate MD5
@@ -202,7 +209,7 @@ func main() {
 
 		// Upload Files - REPLACE EXISTING SAVE
 		fmt.Println("uploading....current-save.zip")
-		err = uploadFile(session, "current-save.zip", "current-save.zip")
+		err = uploadFile(session, "current-save.zip", "current-save.zip", s3Bucket)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -211,7 +218,7 @@ func main() {
 		currentTimeString := currentTime.Format("2006-01-02 15:04:05")
 		new_file_name := fmt.Sprintf("current-save-%s.zip", currentTimeString)
 		fmt.Printf("uploading....%v\n", new_file_name)
-		err = uploadFile(session, "current-save.zip", new_file_name)
+		err = uploadFile(session, "current-save.zip", new_file_name, s3Bucket)
 		if err != nil {
 			log.Fatal(err)
 		}
